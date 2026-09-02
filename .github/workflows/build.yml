@@ -12,7 +12,7 @@ on:
       fcc_ref:
         description: "Upstream FCC branch, tag, or commit"
         required: false
-        default: "master"
+        default: "main"
   schedule:
     - cron: "17 4 * * *"
 
@@ -36,7 +36,7 @@ jobs:
         id: upstream
         shell: bash
         env:
-          REQUESTED_REF: ${{ github.event.inputs.fcc_ref || 'master' }}
+          REQUESTED_REF: ${{ github.event.inputs.fcc_ref || 'main' }}
         run: |
           set -euo pipefail
 
