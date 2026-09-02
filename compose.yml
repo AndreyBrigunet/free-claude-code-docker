@@ -2,7 +2,10 @@ services:
   fcc:
     image: ${FCC_IMAGE:-ghcr.io/andreybrigunet/free-claude-code-docker:latest}
     container_name: fcc
-    restart: unless-stopped
+    restart: unless-stopped 
+
+    network_mode: host
+
     environment:
       HOST: 0.0.0.0
       PORT: 8082
@@ -12,10 +15,10 @@ services:
       PROXY_AUTH_ENABLED: "true"
       ANTHROPIC_AUTH_TOKEN: ${FCC_AUTH_TOKEN:?FCC_AUTH_TOKEN must be set in .env}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    ports:
-      - "${FCC_BIND_ADDRESS:-127.0.0.1}:${FCC_PORT:-8082}:8082"
+
     volumes:
       - fcc-data:/root/.fcc
+
     security_opt:
       - no-new-privileges:true
 
