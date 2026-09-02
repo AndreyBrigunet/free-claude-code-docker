@@ -2,12 +2,11 @@ services:
   fcc:
     image: ${FCC_IMAGE:-ghcr.io/andreybrigunet/free-claude-code-docker:latest}
     container_name: fcc
-    restart: unless-stopped 
-
+    restart: unless-stopped
     network_mode: host
 
     environment:
-      HOST: 0.0.0.0
+      HOST: 127.0.0.1
       PORT: 8082
       FCC_OPEN_BROWSER: "false"
       MESSAGING_PLATFORM: "none"
@@ -16,8 +15,68 @@ services:
       ANTHROPIC_AUTH_TOKEN: ${FCC_AUTH_TOKEN:?FCC_AUTH_TOKEN must be set in .env}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
+    labels:
+      - "traefik.enable=true"
+
+      # FCC backend
+      - "traefik.http.services.fcc.loadbalancer.server.port=8082"
+      - "traefik.http.services.fcc.loadbalancer.passhostheader=false"
+
+      # Public API: /v1/*
+      - "traefik.http.routers.fcc-api.rule=Host(`${TRAEFIK_DOMAIN}`) && PathPrefix(`/v1`)"
+      - "traefik.http.routers.fcc-api.entrypoints=websecure"
+      - "traefik.http.routers.fcc-api.tls=true"
+      - "traefik.http.routers.fcc-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.fcc-api.service=fcc"
+
+      # Admin: /admin/*
+      - "traefik.http.routers.fcc-admin.rule=Host(`${TRAEFIK_DOMAIN}`) && PathPrefix(`/admin`)"
+      - "traefik.http.routers.fcc-admin.entrypoints=websecure"
+      - "traefik.http.routers.fcc-admin.tls=true"
+      - "traefik.http.routers.fcc-admin.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.fcc-admin.service=fcc"
+
+      # Basic Auth before FCC Admin
+      - "traefik.http.routers.fcc-admin.middlewares=fcc-admin-auth,fcc-admin-local"
+      - "traefik.http.middlewares.fcc-admin-auth.basicauth.users=${TRAEFIK_ADMIN_USERS:?TRAEFIK_ADMIN_USERS must be set}"
+      - "traefik.http.middlewares.fcc-admin-auth.basicauth.removeheader=true"
+
+      # FCC requires a local Origin for /admin
+      - "traefik.http.middlewares.fcc-admin-local.headers.customrequestheaders.Origin=http://127.0.0.1:8082"
+
     volumes:
       - fcc-data:/root/.fcc
+
+    security_opt:
+      - no-new-privileges:true
+
+  traefik:
+    image: ${TRAEFIK_IMAGE:-traefik:v3.7}
+    container_name: traefik
+    restart: unless-stopped
+    network_mode: host
+
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+      - "--entrypoints.websecure.address=:443"
+
+      - "--certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+
+      - "--log.level=${TRAEFIK_LOG_LEVEL:-INFO}"
+      - "--accesslog=true"
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-letsencrypt:/letsencrypt
 
     security_opt:
       - no-new-privileges:true
@@ -25,3 +84,6 @@ services:
 volumes:
   fcc-data:
     name: ${FCC_DATA_VOLUME:-fcc-data}
+
+  traefik-letsencrypt:
+    name: ${TRAEFIK_DATA_VOLUME:-traefik-letsencrypt}
